@@ -635,10 +635,10 @@ bool principal2uid(char *principal, uid_t * puid)
 #endif
 {
 #ifdef USE_NFSIDMAP
-  gid_t gss_gid;
   /* Given that we just pass this value back if the lookup fails,
-     perhaps we should initialzie it to something. */
-  uid_t gss_uid = -1;
+     we should initialzie them to -2; which is default uid for anonymous user. */
+  gid_t gss_gid = -2;
+  uid_t gss_uid = -2;
   int rc;
   bool success;
   struct gsh_buffdesc princbuff =
@@ -655,7 +655,7 @@ bool principal2uid(char *principal, uid_t * puid)
   pthread_rwlock_rdlock(&idmapper_user_lock);
   success = idmapper_lookup_by_uname(&princbuff, &gss_gid, NULL);
   pthread_rwlock_unlock(&idmapper_user_lock);
-  if (likely(success))
+  if (unlikely(!success))
     {
       /* nfs4_gss_princ_to_ids required to extract uid/gid from gss creds */
       rc = nfs4_gss_princ_to_ids("krb5", principal, &gss_uid, &gss_gid);
@@ -713,14 +713,17 @@ bool principal2uid(char *principal, uid_t * puid)
           }
 #endif /* _MSPAC_SUPPORT */
 #ifdef _MSPAC_SUPPORT
+#if 0
           if ((found_uid == true) && (found_gid == true))
           {
             goto principal_found;
           }
+#endif          
 #endif
       
           return false;
         }
+#if 0        
 #ifdef _MSPAC_SUPPORT
 principal_found:
 #endif
@@ -735,6 +738,7 @@ principal_found:
 		   "idmapper_add_user(%s, %d, %d) failed",
 		   principal, gss_uid, gss_gid);
 	}
+#endif    
     }
 
   /* This looks suspicious. */
