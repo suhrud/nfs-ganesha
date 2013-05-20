@@ -151,14 +151,14 @@ state_status_t state_add_impl(cache_entry_t *entry,
 
   if(pnew_state == NULL)
     {
-      LogDebug(COMPONENT_STATE,
-               "Can't allocate a new file state from cache pool");
+      LogCrit(COMPONENT_STATE,
+              "Can't allocate a new file state from cache pool");
 
       /* stat */
       status = STATE_MALLOC_ERROR;
 
       if(got_pinned)
-        cache_inode_dec_pin_ref(entry);
+        cache_inode_dec_pin_ref(entry, FALSE);
 
       return status;
     }
@@ -180,14 +180,15 @@ state_status_t state_add_impl(cache_entry_t *entry,
           status = STATE_STATE_CONFLICT;
 
           if(got_pinned)
-            cache_inode_dec_pin_ref(entry);
+            cache_inode_dec_pin_ref(entry, FALSE);
 
           return status;
         }
     }
 
-  /* Add the stateid.other, this will increment state_id_counter */
-  nfs4_BuildStateId_Other(pnew_state->stateid_other);
+  /* Add the stateid.other, this will increment cid_stateid_counter */
+  nfs4_BuildStateId_Other(owner_input->so_owner.so_nfs4_owner.so_clientrec,
+                          pnew_state->stateid_other);
 
   /* Set the type and data for this state */
   memcpy(&(pnew_state->state_data), state_data, sizeof(state_data_t));
@@ -209,9 +210,11 @@ state_status_t state_add_impl(cache_entry_t *entry,
   /* Add the state to the related hashtable */
   if(!nfs4_State_Set(pnew_state->stateid_other, pnew_state))
     {
-      LogDebug(COMPONENT_STATE,
-               "Can't create a new state id %s for the entry %p (F)",
-               debug_str, entry);
+      sprint_mem(debug_str, (char *)pnew_state->stateid_other, OTHERSIZE);
+
+      LogCrit(COMPONENT_STATE,
+              "Can't create a new state id %s for the entry %p (F)",
+              debug_str, entry);
 
       pool_free(state_v4_pool, pnew_state);
 
@@ -221,7 +224,7 @@ state_status_t state_add_impl(cache_entry_t *entry,
       status = STATE_MALLOC_ERROR;
 
       if(got_pinned)
-        cache_inode_dec_pin_ref(entry);
+        cache_inode_dec_pin_ref(entry, FALSE);
 
       return status;
     }
@@ -325,7 +328,9 @@ state_status_t state_del_locked(state_t *state,
   /* Remove the entry from the HashTable */
   if(!nfs4_State_Del(state->stateid_other))
     {
-      LogDebug(COMPONENT_STATE, "Could not delete state %s", debug_str);
+      sprint_mem(debug_str, (char *)state->stateid_other, OTHERSIZE);
+
+      LogCrit(COMPONENT_STATE, "Could not delete state %s", debug_str);
 
       return STATE_STATE_ERROR;
     }
@@ -366,7 +371,7 @@ state_status_t state_del_locked(state_t *state,
   LogFullDebug(COMPONENT_STATE, "Deleted state %s", debug_str);
 
   if(glist_empty(&entry->state_list))
-    cache_inode_dec_pin_ref(entry);
+    cache_inode_dec_pin_ref(entry, FALSE);
 
   return STATE_SUCCESS;
 }
