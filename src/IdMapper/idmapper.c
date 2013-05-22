@@ -626,11 +626,11 @@ bool principal2uid(char *principal, uid_t *puid, gid_t *pgid)
 #endif
 {
 #ifdef USE_NFSIDMAP
-  uid_t gss_uid = -2;
-  gid_t gss_gid = -2;
+  uid_t gss_uid = ANON_UID;
+  gid_t gss_gid = ANON_GID;
   gid_t *pgss_gid = NULL;
   /* Given that we just pass this value back if the lookup fails,
-     we should initialzie them to -2; which is default uid for anonymous user. */
+     we should initialzie them to ANON_UID and ANON_GID */
   int rc;
   bool success;
   struct gsh_buffdesc princbuff =
