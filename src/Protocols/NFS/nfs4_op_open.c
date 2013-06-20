@@ -974,6 +974,12 @@ out_prev:
             LogDebug(COMPONENT_STATE,
                      "state_del failed with status %s",
                      state_err_str(state_status));
+          PTHREAD_RWLOCK_WRLOCK(&pfile_state->state_pentry->state_lock);
+          cache_inode_close(pfile_state->state_pentry,
+                            data->pcontext,
+                            CACHE_INODE_FLAG_REALLYCLOSE,
+                            &cache_status);
+          PTHREAD_RWLOCK_UNLOCK(&pfile_state->state_pentry->state_lock);
         }
     }
 
