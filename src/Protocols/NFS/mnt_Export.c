@@ -96,6 +96,8 @@ int mnt_Export(nfs_arg_t *parg,
   unsigned int i = 0;
   int pathlen=0;
 
+  export_perms_t pexport_perms;
+
   LogDebug(COMPONENT_NFSPROTO, "REQUEST PROCESSING: Calling mnt_Export");
 
   /* paranoid command, to avoid parasites in the result structure. */
@@ -108,6 +110,20 @@ int mnt_Export(nfs_arg_t *parg,
 
       exports new_expnode;      /* the export node to be added to the list */
 
+      /* If client does not have any access to the export, don't add it to the list */
+      nfs_export_check_access(&pworker->hostaddr,
+                              p_current_item,
+                              &pexport_perms);
+      if(pexport_perms.options == 0)
+      {
+        LogDebug(COMPONENT_NFSPROTO,
+                 "Client %s is not allowed to access Export_Id %d %s",
+                 pworker->hostaddr_str,
+                 p_current_item->id, p_current_item->fullpath);
+
+        continue;
+      }
+      
       new_expnode = gsh_calloc(1,sizeof(exportnode));
 
       /* ---- ex_dir ------ */
