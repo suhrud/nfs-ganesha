@@ -400,11 +400,16 @@ success:
  */
 #ifdef _HAVE_GSSAPI
 #ifdef _MSPAC_SUPPORT
-int principal2uid(char *principal, uid_t * puid, struct svc_rpc_gss_data *gd)
+//int principal2uid(char *principal, uid_t * puid, struct svc_rpc_gss_data *gd)
+int principal2uid(char *principal, struct user_cred *user_credentials, struct svc_rpc_gss_data *gd)
 #else
 int principal2uid(char *principal, uid_t * puid)
 #endif
 {
+#ifdef _MSPAC_SUPPORT
+uid_t *puid = &(user_credentials->caller_uid);
+#endif
+
 #ifdef _USE_NFSIDMAP
   gid_t gss_gid;
   uid_t gss_uid;
@@ -485,6 +490,8 @@ int principal2uid(char *principal, uid_t * puid)
               return 0;
             }
 
+            user_credentials->caller_uid = gss_uid;
+
             /* 2nd SID is primary_group sid, see wbclient.h */
             wbc_err = wbcSidToGid(&info->sids[1].sid, &gss_gid);
             if (!WBC_ERROR_IS_OK(wbc_err)) {
@@ -493,26 +500,78 @@ int principal2uid(char *principal, uid_t * puid)
               wbcFreeMemory(info);
               return 0;
             }
+
+            user_credentials->caller_gid = gss_gid;
+
+            // Get secondary gids from pac
+            // The secondary gids are present from third sid.
+            user_credentials->caller_glen = info->num_sids - 2;
+            LogFullDebug(COMPONENT_IDMAPPER,
+                         "principal2uid: Got %u secondery gids for:%u",
+                         user_credentials->caller_glen,
+                         user_credentials->caller_uid);
+
+            user_credentials->caller_garray = 
+                    gsh_malloc(user_credentials->caller_glen * sizeof(gid_t));
+
+            if(user_credentials->caller_garray == NULL)
+            {
+              LogCrit(COMPONENT_IDMAPPER,
+                      "Failure to allocate memory for GSS grouplist");
+              return 0;
+            }
+            else
+            {
+              int i=0;
+              
+              for(i=0; i<user_credentials->caller_glen; i++)
+              {
+                wbc_err = wbcSidToGid(&info->sids[i+2].sid, 
+                                      &user_credentials->caller_garray[i]);
+                if (!WBC_ERROR_IS_OK(wbc_err)) 
+                {
+                  LogCrit(COMPONENT_IDMAPPER,
+                          "wbcSidToUid for gid returned %s\n",
+                          wbcErrorString(wbc_err));
+                  wbcFreeMemory(info);
+
+                  gsh_free(user_credentials->caller_garray);
+                  user_credentials->caller_garray = NULL;
+                  user_credentials->caller_glen = 0;
+                  return 0;
+                }
+
+                LogFullDebug(COMPONENT_IDMAPPER,
+                       "principal2uid: Got secondary GID: %u for uid: %u",
+                       user_credentials->caller_garray[i], 
+                       user_credentials->caller_uid);
+              }
+            }
+
             wbcFreeMemory(info);
             found_uid = true;
             found_gid = true;
+
+            // Return success. Don't add to Ganesha idmap cache for now.
+            // Cannot add it unless cache structure can hold secondary groups
+            return 1;
           }
 #endif
           LogFullDebug(COMPONENT_IDMAPPER,
                        "principal2uid: nfs4_gss_princ_to_ids %s failed %d (%s)",
                        principal, -rc, strerror(-rc));
-#ifdef _MSPAC_SUPPORT
-          if ((found_uid == true) && (found_gid == true))
-          {
-            goto principal_found;
-          }
-#endif
+//#ifdef _MSPAC_SUPPORT
+//          if ((found_uid == true) && (found_gid == true))
+//          {
+//            goto principal_found;
+//          }
+//#endif
       
           return 0;
         }
-#ifdef _MSPAC_SUPPORT
-principal_found:
-#endif
+//#ifdef _MSPAC_SUPPORT
+//principal_found:
+//#endif
       if(uidmap_add(principal, gss_uid, 0) != ID_MAPPER_SUCCESS)
 	{
 	  LogCrit(COMPONENT_IDMAPPER,

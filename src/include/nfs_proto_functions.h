@@ -1427,7 +1427,7 @@ int uid2name(char *name, uid_t * puid, size_t namesize);
 int name2uid(char *name, uid_t * puid);
 #ifdef _HAVE_GSSAPI
 #ifdef _MSPAC_SUPPORT
-int principal2uid(char *principal, uid_t * puid, struct svc_rpc_gss_data *gd);
+int principal2uid(char *principal, struct user_cred *uc, struct svc_rpc_gss_data *gd);
 #else
 int principal2uid(char *principal, uid_t * puid);
 #endif

@@ -384,7 +384,8 @@ int get_req_uid_gid(struct svc_req *req,
 
       /* Convert to uid */
 #if _MSPAC_SUPPORT
-      if(!principal2uid(principal, &user_credentials->caller_uid, gd))
+      //if(!principal2uid(principal, &user_credentials->caller_uid, gd))
+      if(!principal2uid(principal, user_credentials, gd))
 #else
       if(!principal2uid(principal, &user_credentials->caller_uid))
 #endif
@@ -399,6 +400,28 @@ int get_req_uid_gid(struct svc_req *req,
 
 	  return TRUE;
 	}
+
+#if _MSPAC_SUPPORT
+        if(user_credentials->caller_garray)
+        {
+        //  int i = 0;
+          LogFullDebug(COMPONENT_IDMAPPER,
+                       "get_req_uid_gid: got grouplist from PAC for uid: %u number of groups: %u", 
+                       user_credentials->caller_uid, user_credentials->caller_glen );
+          LogFullDebug(COMPONENT_IDMAPPER,"primary GID: %u", user_credentials->caller_gid);
+
+          for(i=0; i<user_credentials->caller_glen; i++)
+          {
+            LogFullDebug(COMPONENT_IDMAPPER,"Secondary gid[%d]: %u", i, user_credentials->caller_garray[i]);
+          }
+          break;
+        }
+        else
+        {
+          LogFullDebug(COMPONENT_IDMAPPER, "get_req_uid_gid: No grouplist from PAC for uid: %u",
+                       user_credentials->caller_uid);
+        }
+#endif
 
       if(uidgidmap_get(user_credentials->caller_uid,
                        &user_credentials->caller_gid) != ID_MAPPER_SUCCESS)
