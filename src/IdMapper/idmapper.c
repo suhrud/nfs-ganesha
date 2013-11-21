@@ -418,7 +418,9 @@ uid_t *puid = &(user_credentials->caller_uid);
       return 1;
     }
 
+#ifndef _MSPAC_SUPPORT
   if(uidmap_get(principal, &gss_uid) != ID_MAPPER_SUCCESS)
+#endif
     {
       if(!nfsidmap_set_conf())
         {

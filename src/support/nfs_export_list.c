@@ -383,7 +383,7 @@ int get_req_uid_gid(struct svc_req *req,
       principal[gd->cname.length] = 0;
 
       /* Convert to uid */
-#if _MSPAC_SUPPORT
+#ifdef _MSPAC_SUPPORT
       //if(!principal2uid(principal, &user_credentials->caller_uid, gd))
       if(!principal2uid(principal, user_credentials, gd))
 #else
@@ -401,10 +401,10 @@ int get_req_uid_gid(struct svc_req *req,
 	  return TRUE;
 	}
 
-#if _MSPAC_SUPPORT
+#ifdef _MSPAC_SUPPORT
         if(user_credentials->caller_garray)
         {
-        //  int i = 0;
+          int i = 0;
           LogFullDebug(COMPONENT_IDMAPPER,
                        "get_req_uid_gid: got grouplist from PAC for uid: %u number of groups: %u", 
                        user_credentials->caller_uid, user_credentials->caller_glen );
