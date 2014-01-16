@@ -536,6 +536,54 @@ static bool gsh_export_showexports(DBusMessageIter *args, DBusMessage *reply)
 	return true;
 }
 
+static bool gsh_export_add_export(DBusMessageIter *args, DBusMessage *reply)
+{
+	DBusMessageIter iter;
+	bool success = true;
+	char *errormsg = "OK";
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_status_reply(&iter, success, errormsg);
+
+	return true;
+}
+
+static bool gsh_export_enable_export(DBusMessageIter *args, DBusMessage *reply)
+{
+	DBusMessageIter iter;
+	bool success = true;
+	char *errormsg = "OK";
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_status_reply(&iter, success, errormsg);
+
+	return true;
+}
+
+static bool gsh_export_add_export_client(DBusMessageIter *args, DBusMessage *reply)
+{
+	DBusMessageIter iter;
+	bool success = true;
+	char *errormsg = "OK";
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_status_reply(&iter, success, errormsg);
+
+	return true;
+}
+
+static bool gsh_export_delete_export(DBusMessageIter *args, DBusMessage *reply)
+{
+	DBusMessageIter iter;
+	bool success = true;
+	char *errormsg = "OK";
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_status_reply(&iter, success, errormsg);
+
+	return true;
+}
+
 static struct gsh_dbus_method export_show_exports = {
 	.name = "ShowExports",
 	.method = gsh_export_showexports,
@@ -547,8 +595,44 @@ static struct gsh_dbus_method export_show_exports = {
 		 END_ARG_LIST}
 };
 
+static struct gsh_dbus_method export_add_export = {
+	.name = "AddExport",
+	.method = gsh_export_add_export,
+	.args = {EXPORT_ARG,
+		 STATUS_REPLY,
+		 END_ARG_LIST}
+};
+
+static struct gsh_dbus_method export_enable_export = {
+	.name = "EnableExport",
+	.method = gsh_export_enable_export,
+	.args = {EXPORT_ID_ARG,
+		 STATUS_REPLY,
+		 END_ARG_LIST}
+};
+
+static struct gsh_dbus_method export_add_export_client = {
+	.name = "AddExportClient",
+	.method = gsh_export_add_export_client,
+	.args = {EXPORT_CLIENT_ARG,
+		 STATUS_REPLY,
+		 END_ARG_LIST}
+};
+
+static struct gsh_dbus_method export_delete_export = {
+	.name = "DeleteExport",
+	.method = gsh_export_delete_export,
+	.args = {EXPORT_ID_ARG,
+		 STATUS_REPLY,
+		 END_ARG_LIST}
+};
+
 static struct gsh_dbus_method *export_mgr_methods[] = {
 	&export_show_exports,
+	&export_add_export,
+	&export_add_export_client,
+	&export_enable_export,
+	&export_delete_export,
 	NULL
 };
 

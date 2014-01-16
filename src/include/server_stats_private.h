@@ -103,6 +103,21 @@ struct export_stats {
 /* Bits for introspect arg structures
  */
 
+#define EXPORT_ARG    \
+{                        \
+        .name = "export",\
+        .type = "isbbbbbbb",     \
+        .direction = "in"\
+}  
+
+
+#define EXPORT_CLIENT_ARG    \
+{                        \
+        .name = "export_client",\
+        .type = "isssiibbbbssbs",     \
+        .direction = "in"\
+}
+
 #define EXPORT_ID_ARG    \
 {                        \
 	.name = "exp_id",\
