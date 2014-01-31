@@ -900,7 +900,6 @@ int nfs_client_id_get(hash_table_t     * ht,
           status = CLIENT_ID_STALE;
           dec_client_id_ref(pclientid);
           pclientid->cid_confirmed = EXPIRED_CLIENT_ID;
-          HashTable_Del(ht, &buffkey, NULL, NULL);
           dec_client_id_ref(pclientid);
         }
     }
