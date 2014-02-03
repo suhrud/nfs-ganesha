@@ -235,6 +235,7 @@ char workpath[PATH_MAX];
                         // done processing the entry. Delete the file.
                         sprintf(workpath,"%s/%s",NFS_RECOV_EVENTS,namelist[ientry]->d_name);
                         remove(workpath);
+                        LogEvent(COMPONENT_THREAD, "Deleted myrelease file :%s ", workpath);
 
                         /* we are done with v3 */
                         notdone = 0;
@@ -390,7 +391,7 @@ int ientry;
 time_t t_this_entry, t_dead, sticky_time;
 char workpath[PATH_MAX];
 
-        sticky_time = ( NFS_RECOV_CYCLE * NFS_RECOV_GC );
+        sticky_time = ( NFS_RECOV_CYCLE * NFS_RECOV_GC * 10);
         t_dead = time(NULL);
         t_dead -= sticky_time;
         ientry = inum - 1;
@@ -598,7 +599,7 @@ nfs_grace_start_array_t *nfs_grace_start_array;
                 }
           
                 if ( ucnt == 0 ) { /* We are just coming up. Should be in grace for us. */
-                        sleep(NFS_RECOV_STATE_CNT * NFS_RECOV_GC); /* let things clear out */
+                        sleep(NFS_RECOV_GC); /* let things clear out */
                         ucnt += NFS_RECOV_STATE_CNT;
                 } else    
                         ucnt++;
