@@ -80,6 +80,26 @@
 	.direction = "in"\
 }
 
+#define EXP_ID_ARG		\
+{				\
+	.name = "id",		\
+	.type = "i",		\
+	.direction = "in"	\
+}
+
+#define PATH_ARG		\
+{				\
+	.name = "path",		\
+	.type = "s",		\
+	.direction = "in"	\
+}
+#define BEFORE_ARG		\
+{				\
+	.name = "before",		\
+	.type = "b",		\
+	.direction = "in"	\
+}
+
 /* Properties list helper macros
  */
 

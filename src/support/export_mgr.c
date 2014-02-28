@@ -789,8 +789,94 @@ static struct gsh_dbus_method export_show_exports = {
 		 END_ARG_LIST}
 };
 
+/**
+ * @brief Add an export either before or after the ID'd export
+ *
+ * This method passes a pathname in the server's local filesystem
+ * that should be parsed and processed by the config_parsing module.
+ * The resulting export entry is then added before or after the ID'd
+ * export entry. Params are in the args iter
+ *
+ * @param "id"     [IN] The ID of the export we attach before/after
+ * @param "path"   [IN] A local path to a file with only an EXPORT {...}
+ * @param "before" [IN] if true, before ID, if false, after
+ *
+ * @return         We don't use STATUS_REPLY.  See log properties for a
+ *                 better DBus std way to report status/error
+ */
+
+static bool gsh_export_addexport(DBusMessageIter *args, DBusMessage *reply)
+{
+	return true;
+}
+
+static struct gsh_dbus_method export_add_export = {
+	.name = "AddExport",
+	.method = gsh_export_addexport,
+	.args =	{EXP_ID_ARG,
+		 PATH_ARG,
+		 BEFORE_ARG,
+		 END_ARG_LIST}
+};
+
+/**
+ * @brief Remove an export
+ *
+ * @param "id"  [IN] the id of the export to remove
+ *
+ * @return           As above, use DBusError to return errors.
+ */
+
+static bool gsh_export_removeexport(DBusMessageIter *args, DBusMessage *reply)
+{
+	return true;
+}
+
+static struct gsh_dbus_method export_remove_export = {
+	.name = "RemoveExport",
+	.method = gsh_export_removeexport,
+	.args = {EXP_ID_ARG,
+		 END_ARG_LIST}
+};
+
+#define DISP_EXP_REPLY		\
+{				\
+	.name = "id",		\
+	.type = "i",		\
+	.direction = "out"	\
+},				\
+{				\
+	.name = "full_path",	\
+	.type = "s",		\
+	.direction = "out"	\
+}
+
+/**
+ * @brief Display the contents of an export
+ *
+ * NOTE: this is probably better done as properties.
+ * the interfaces are set up for it.  This is here for now
+ * but should not be considered a permanent method
+ */
+
+static bool gsh_export_displayexport(DBusMessageIter *args, DBusMessage *reply)
+{
+	return true;
+}
+
+static struct gsh_dbus_method export_display_export = {
+	.name = "DisplayExport",
+	.method = gsh_export_displayexport,
+	.args = {EXP_IS_ARG,
+		 DISP_EXP_REPLY,
+		 END_ARG_LIST}
+};
+
 static struct gsh_dbus_method *export_mgr_methods[] = {
 	&export_show_exports,
+	&export_add_export,
+	&export_remove_export,
+	&export_display_export,
 	NULL
 };
 
