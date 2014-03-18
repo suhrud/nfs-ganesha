@@ -728,6 +728,43 @@ bool foreach_gsh_export(bool(*cb) (struct gsh_export *exp, void *state),
 /* DBUS interfaces
  */
 
+/* parse the ipaddr string in args
+ */
+
+static bool arg_export_id(DBusMessageIter *args, int32_t *export_id,
+			  char **errormsg)
+{
+	bool success = true;
+
+	if (args == NULL) {
+		success = false;
+		*errormsg = "message has no arguments";
+	} else if (DBUS_TYPE_INT32 != dbus_message_iter_get_arg_type(args)) {
+		success = false;
+		*errormsg = "arg not a 32 bit integer";
+	} else {
+		dbus_message_iter_get_basic(args, export_id);
+	}
+	return success;
+}
+
+/* DBUS client manager stats helpers
+ */
+
+static struct gsh_export *lookup_export(DBusMessageIter *args, char **errormsg)
+{
+	int32_t export_id;
+	struct gsh_export *export = NULL;
+	bool success = true;
+
+	success = arg_export_id(args, &export_id, errormsg);
+	if (success) {
+		export = get_gsh_export(export_id, true);
+		if (export == NULL)
+			*errormsg = "Export id not found";
+	}
+	return export;
+}
 struct showexports_state {
 	DBusMessageIter export_iter;
 };
@@ -807,15 +844,47 @@ static struct gsh_dbus_method export_show_exports = {
 
 static bool gsh_export_addexport(DBusMessageIter *args, DBusMessage *reply)
 {
-	return true;
+	int rc;
+	bool retval = true;
+	char *file_path = NULL;
+	config_file_t config_struct;
+
+	// Get path
+	if ( DBUS_TYPE_STRING == dbus_message_iter_get_arg_type(args)) {
+		dbus_message_iter_get_basic(args, &file_path);
+	}
+	else {
+		retval = false;
+		goto out;
+	}
+	LogInfo(COMPONENT_DBUS, "Adding export from file: %s", file_path);
+
+	config_struct = config_ParseFile(file_path);
+	if (!config_struct) {
+		LogFatal(COMPONENT_DBUS, "Error while parsing %s: %s",
+			 file_path, config_GetErrorMsg());
+	}
+
+	/* Load export entry from parsed file
+	*/
+	rc = ReadExports(config_struct, true);
+	if (rc < 0) {
+		LogCrit(COMPONENT_DBUS, "Error while parsing export entry");
+		retval = false;
+	} else if (rc == 0) {
+		LogWarn(COMPONENT_DBUS,
+			"No export entry found in configuration file !!!");
+	}
+	config_Free(config_struct);
+
+out:
+	return retval;
 }
 
 static struct gsh_dbus_method export_add_export = {
 	.name = "AddExport",
 	.method = gsh_export_addexport,
-	.args =	{EXP_ID_ARG,
-		 PATH_ARG,
-		 BEFORE_ARG,
+	.args = {PATH_ARG,
 		 END_ARG_LIST}
 };
 
@@ -829,6 +898,29 @@ static struct gsh_dbus_method export_add_export = {
 
 static bool gsh_export_removeexport(DBusMessageIter *args, DBusMessage *reply)
 {
+	struct gsh_export *export = NULL;
+	char *errormsg = "OK";
+
+	export = lookup_export(args, &errormsg);
+	if (export == NULL) {
+		LogDebug(COMPONENT_DBUS, "lookup_export failed with %s",
+			 errormsg);
+		return false;
+	}
+	else {
+		if(export->export.id == 0) {
+			LogDebug(COMPONENT_DBUS,
+				 "Cannot remove export with id 0");
+			put_gsh_export(export);
+			return false;	
+		}
+		unexport(export);
+		LogInfo(COMPONENT_DBUS, "Removed export with id %d",
+			export->export.id);
+
+		put_gsh_export(export);
+	}
+
 	return true;
 }
 
@@ -867,7 +959,7 @@ static bool gsh_export_displayexport(DBusMessageIter *args, DBusMessage *reply)
 static struct gsh_dbus_method export_display_export = {
 	.name = "DisplayExport",
 	.method = gsh_export_displayexport,
-	.args = {EXP_IS_ARG,
+	.args = {EXP_ID_ARG,
 		 DISP_EXP_REPLY,
 		 END_ARG_LIST}
 };
@@ -892,43 +984,6 @@ static struct gsh_dbus_interface export_mgr_table = {
 /* org.ganesha.nfsd.exportstats interface
  */
 
-/* parse the ipaddr string in args
- */
-
-static bool arg_export_id(DBusMessageIter *args, int32_t *export_id,
-			  char **errormsg)
-{
-	bool success = true;
-
-	if (args == NULL) {
-		success = false;
-		*errormsg = "message has no arguments";
-	} else if (DBUS_TYPE_INT32 != dbus_message_iter_get_arg_type(args)) {
-		success = false;
-		*errormsg = "arg not a 32 bit integer";
-	} else {
-		dbus_message_iter_get_basic(args, export_id);
-	}
-	return success;
-}
-
-/* DBUS client manager stats helpers
- */
-
-static struct gsh_export *lookup_export(DBusMessageIter *args, char **errormsg)
-{
-	int32_t export_id;
-	struct gsh_export *export = NULL;
-	bool success = true;
-
-	success = arg_export_id(args, &export_id, errormsg);
-	if (success) {
-		export = get_gsh_export(export_id, true);
-		if (export == NULL)
-			*errormsg = "Export id not found";
-	}
-	return export;
-}
 
 /**
  * DBUS method to report NFSv3 I/O statistics

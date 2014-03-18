@@ -392,7 +392,7 @@ cache_inode_status_t nfs_export_get_root_entry(struct gsh_export *exp,
 void unexport(struct gsh_export *export);
 void kill_export_root_entry(cache_entry_t *entry);
 
-int ReadExports(config_file_t in_config);
+int ReadExports(config_file_t in_config, bool add_export);
 void free_export_resources(exportlist_t *export);
 void exports_pkginit(void);
 

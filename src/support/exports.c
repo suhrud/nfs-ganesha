@@ -813,6 +813,45 @@ static void export_display(const char *step, void *node,
 }
 
 /**
+ * @brief Commit an add export
+ * commit the export
+ * init export root and mount it in pseudo fs
+ * 
+ */
+
+static int add_export_commit(void *node, void *link_mem, void *self_struct)
+{
+	struct exportlist *exp = self_struct;
+	struct gsh_export *export;
+	struct root_op_context root_op_context;
+	int errcnt = 0;
+
+	errcnt = export_commit(node, link_mem, self_struct);
+	if ( errcnt != 0) {
+		goto err_out;
+	}
+
+	export = container_of(exp, struct gsh_export, export);
+	if (!init_export_root(export)) {
+		errcnt++;
+		goto err_out;
+
+	}
+
+	/* Initialize req_ctx */
+	init_root_op_context(&root_op_context, NULL, NULL,
+				NFS_V4, 0, NFS_REQUEST);
+
+	// [TBD] Confirm if export_by_id.lock needs to be taken here
+	if (!pseudo_mount_export(export, &root_op_context.req_ctx)){
+		errcnt++;
+	}
+
+err_out:
+	return errcnt;
+}
+
+/**
  * @brief Initialize an EXPORT_DEFAULTS block
  *
  */
@@ -1098,6 +1137,20 @@ struct config_block export_defaults_param = {
 };
 
 /**
+ * @brief Top level definition for an ADD EXPORT block
+ */
+
+struct config_block add_export_param= {
+	.dbus_interface_name = "org.ganesha.nfsd.config.export.%d",
+	.blk_desc.name = "EXPORT",
+	.blk_desc.type = CONFIG_BLOCK,
+	.blk_desc.u.blk.init = export_init,
+	.blk_desc.u.blk.params = export_params,
+	.blk_desc.u.blk.commit = add_export_commit,
+	.blk_desc.u.blk.display = export_display
+};
+
+/**
  * @brief builds an export entry for '/' with default parameters
  *
  * If export_id = 0 has not been specified, and not other export
@@ -1247,7 +1300,7 @@ err_out:
  * @return A negative value on error,
  *         the number of export entries else.
  */
-int ReadExports(config_file_t in_config)
+int ReadExports(config_file_t in_config,  bool add_export)
 {
 	int rc, ret = 0;
 
@@ -1258,10 +1311,18 @@ int ReadExports(config_file_t in_config)
 	if (rc < 0)
 		return rc;
 
-	rc = load_config_from_parse(in_config,
-				      &export_param,
-				      NULL,
-				      false);
+	if(add_export) {
+		rc = load_config_from_parse(in_config,
+					      &add_export_param,
+					      NULL,
+					      false);
+	}
+	else {
+		rc = load_config_from_parse(in_config,
+					      &export_param,
+					      NULL,
+					      false);
+	}
 	if (rc >= 0) {
 		ret = build_default_root();
 		if (ret < 0) {

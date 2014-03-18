@@ -461,10 +461,10 @@ static int pop_file(struct parser_state *st)
 	ganeshun_yy_delete_buffer(bs->bs, yyscanner);
 	prevbs = bs->prev;
 	gsh_free(bs);
+	curbs = prevbs;
 	if (prevbs == NULL)
 		return 0;
 	ganeshun_yy_switch_to_buffer(prevbs->bs, yyscanner);
-	curbs = prevbs;
 	yylineno = curbs->lineno;
 	current_file = curbs->filename;
 	return 1;
