@@ -867,7 +867,37 @@ static struct gsh_dbus_method export_add_export = {
 
 static bool gsh_export_removeexport(DBusMessageIter *args, DBusMessage *reply)
 {
-	return true;
+	struct gsh_export *export = NULL;
+	char *errormsg = "OK";
+	bool rc = true;
+
+	/* Make sure only one thread is in here at a time. */
+	pthread_mutex_lock(&dynamic_export_serializer);
+
+	export = lookup_export(args, &errormsg);
+	if (export == NULL) {
+		LogDebug(COMPONENT_EXPORT, "lookup_export failed with %s",
+			errormsg);
+		rc = false;
+		goto out;
+	} else {
+		if (export->export.id == 0) {
+			LogDebug(COMPONENT_EXPORT,
+				"Cannot remove export with id 0");
+			put_gsh_export(export);
+			rc = false;
+			goto out;
+		}
+		unexport(export);
+		LogInfo(COMPONENT_EXPORT, "Removed export with id %d",
+			export->export.id);
+
+		put_gsh_export(export);
+	}
+
+out:
+	pthread_mutex_unlock(&dynamic_export_serializer);
+	return rc;
 }
 
 static struct gsh_dbus_method export_remove_export = {
