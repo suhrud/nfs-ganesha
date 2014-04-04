@@ -866,7 +866,7 @@ static bool gsh_export_displayexport(DBusMessageIter *args, DBusMessage *reply)
 static struct gsh_dbus_method export_display_export = {
 	.name = "DisplayExport",
 	.method = gsh_export_displayexport,
-	.args = {EXP_IS_ARG,
+	.args = {EXP_ID_ARG,
 		 DISP_EXP_REPLY,
 		 END_ARG_LIST}
 };
