@@ -607,6 +607,29 @@ struct gsh_export *get_gsh_export_by_tag(char *tag)
 	return exp;
 }
 
+/**
+ * @brief mount the export in pseudo FS
+ *
+ */
+
+bool mount_gsh_export(struct gsh_export *exp)
+{
+	struct root_op_context root_op_context;
+	bool rc = true;
+
+	/* Initialize req_ctx */
+	init_root_op_context(&root_op_context, NULL, NULL,
+				NFS_V4, 0, NFS_REQUEST);
+
+	PTHREAD_RWLOCK_rdlock(&export_by_id.lock);
+	if (!pseudo_mount_export(exp, &root_op_context.req_ctx))
+		rc = false;
+	PTHREAD_RWLOCK_unlock(&export_by_id.lock);
+
+	return rc;
+}
+
+
 pthread_mutex_t release_export_serializer = PTHREAD_MUTEX_INITIALIZER;
 
 /**
@@ -844,15 +867,48 @@ static struct gsh_dbus_method export_show_exports = {
 
 static bool gsh_export_addexport(DBusMessageIter *args, DBusMessage *reply)
 {
-	return true;
+	int rc;
+	bool retval = true;
+	char *file_path = NULL;
+	config_file_t config_struct;
+
+	/* Get path */
+	if (DBUS_TYPE_STRING == dbus_message_iter_get_arg_type(args))
+		dbus_message_iter_get_basic(args, &file_path);
+	else {
+		retval = false;
+		goto out;
+	}
+	LogInfo(COMPONENT_EXPORT, "Adding export from file: %s", file_path);
+
+	config_struct = config_ParseFile(file_path);
+	if (!config_struct) {
+		LogCrit(COMPONENT_EXPORT, "Error while parsing %s:",
+		file_path); 
+	}
+
+	/* Load export entry from parsed file */
+	rc = load_config_from_parse(config_struct,
+					&add_export_param,
+					NULL,
+					false);
+	if (rc < 0) {
+		LogCrit(COMPONENT_EXPORT, "Error while parsing export entry");
+		retval = false;
+	} else if (rc == 0) {
+		LogWarn(COMPONENT_EXPORT,
+			"No export entry found in configuration file !!!");
+	}
+	config_Free(config_struct);
+
+out:
+	return retval;
 }
 
 static struct gsh_dbus_method export_add_export = {
 	.name = "AddExport",
 	.method = gsh_export_addexport,
-	.args =	{EXP_ID_ARG,
-		 PATH_ARG,
-		 BEFORE_ARG,
+	.args =	{PATH_ARG,
 		 END_ARG_LIST}
 };
 
