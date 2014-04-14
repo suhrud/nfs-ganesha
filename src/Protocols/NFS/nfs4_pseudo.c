@@ -39,6 +39,36 @@
 #include "cache_inode_lru.h"
 #include "export_mgr.h"
 
+/*
+ * XXX GCC header include issue (abstract_atomic.h IS included, but
+ * atomic_fetch_voidptr fails when used from cache_inode_remove.c.
+ */
+
+/**
+ * @brief Atomically fetch a void *
+ *
+ * This function atomically fetches the value indicated by the
+ * supplied pointer.
+ *
+ * @param[in,out] var Pointer to the variable to fetch
+ *
+ * @return the value pointed to by var.
+ */
+
+#ifdef GCC_ATOMIC_FUNCTIONS
+static inline void *
+atomic_fetch_voidptr(void **var)
+{
+	return __atomic_load_n(var, __ATOMIC_SEQ_CST);
+}
+#elif defined(GCC_SYNC_FUNCTIONS)
+static inline void *
+atomic_fetch_voidptr(void **var)
+{
+	return __sync_fetch_and_add(var, 0);
+}
+#endif
+
 /**
  * @brief Find the node for this path component
  *
