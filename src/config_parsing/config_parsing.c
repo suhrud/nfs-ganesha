@@ -1232,6 +1232,72 @@ config_file_t get_parse_root(void *node)
 	return (config_file_t)root;
 }
 
+
+/**
+ * @brief Lookup node from parse tree based on block name and item name.
+ *
+ *
+ * @param config      [IN] root of parse tree
+ * @param blkname    [IN] Block name to look for
+ * @param itemname   [IN] Item name within the block
+ * @param value	      [IN] Expected value of the item
+ *
+ * @returns  NULL on errors, Node for success
+ */
+
+config_file_t config_get_node_by_block(config_file_t config,
+					char *blkname,
+					char *itemname,
+					char *value)
+{
+	struct config_root *tree = (struct config_root *)config;
+	struct config_node *node = NULL;
+	struct glist_head *ns;
+
+	struct config_node *sub_node = NULL;
+	struct glist_head *sub_ns;
+
+	if (tree->root.type != TYPE_ROOT) {
+		LogInfo(COMPONENT_CONFIG,
+			"Expected to start at parse tree root for (%s)",
+			blkname);
+		return NULL;
+	}
+
+	glist_for_each(ns, &tree->root.u.blk.sub_nodes) {
+		node = glist_entry(ns, struct config_node, node);
+		if (node->type == TYPE_BLOCK &&
+		    strcasecmp(blkname, node->name) == 0) {
+			glist_for_each(sub_ns, &node->u.blk.sub_nodes) {
+				sub_node = glist_entry(sub_ns, 
+							struct config_node,
+							node);
+				if(sub_node->type == TYPE_STMT &&
+					strcasecmp(itemname, 
+						   sub_node->name) == 0 && 
+					strcasecmp(value,
+						   sub_node->u.varvalue) == 0) {
+					/* Found the node */
+					goto found;
+				}
+			}
+		}
+	}
+
+	LogDebug(COMPONENT_CONFIG,
+		"Could not find block: %s with item: %s having value: %s",
+		blkname, itemname, value);
+
+	return NULL;
+
+found:
+	LogDebug(COMPONENT_CONFIG,
+		"Found block: %s with item: %s having value: %s",
+		blkname, itemname, value);
+
+	return (config_file_t) node;
+}
+
 /**
  * @brief Fill configuration structure from a parse tree node
  *

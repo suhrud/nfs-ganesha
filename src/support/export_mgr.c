@@ -738,8 +738,11 @@ static bool gsh_export_addexport(DBusMessageIter *args,
 {
 	int rc;
 	bool retval = true;
+	int32_t export_id;
+	char export_id_str[8];
 	char *file_path = NULL;
-	config_file_t config_struct;
+	config_file_t config_struct = NULL;
+	config_file_t config_node = NULL;
 	struct config_error_type err_type;
 	DBusMessageIter iter;
 	char *err_detail = NULL;
@@ -754,7 +757,19 @@ static bool gsh_export_addexport(DBusMessageIter *args,
 		retval = false;
 		goto out;
 	}
-	LogInfo(COMPONENT_EXPORT, "Adding export from file: %s", file_path);
+	if (dbus_message_iter_next(args) &&
+		dbus_message_iter_get_arg_type(args) == DBUS_TYPE_INT32)
+		dbus_message_iter_get_basic(args, &export_id);
+	else {     
+		dbus_set_error(error, DBUS_ERROR_INVALID_ARGS,
+			       "Export id not specified (%c)",
+			       dbus_message_iter_get_arg_type(args));
+		retval = false;
+		goto out;
+	}
+
+	LogInfo(COMPONENT_EXPORT, "Adding export with id: %d from file: %s",
+		export_id, file_path);
 
 	config_struct = config_ParseFile(file_path, &err_type);
 	if (!config_error_is_harmless(&err_type)) {
@@ -769,19 +784,36 @@ static bool gsh_export_addexport(DBusMessageIter *args,
 			goto out;
 	}
 
+	snprintf(export_id_str, 8, "%d", export_id);
+
+	/* Get the new export block 
+	 * and load the config only for this new block.
+	 */
+	config_node = config_get_node_by_block(config_struct,
+						"EXPORT",
+						"Export_id",
+						export_id_str);
+	if (!config_node) {
+		dbus_set_error(error, DBUS_ERROR_INVALID_FILE_CONTENT,
+			       "Internal error while processing %s",
+			       file_path);
+		retval = false;
+		goto out;
+	}
+
 	/* Load export entry from parsed file */
-	rc = load_config_from_parse(config_struct,
-				    &add_export_param,
-				    NULL,
-				    false,
-				    &err_type);
+	rc = load_config_from_node(config_node,
+				   &add_export_param,
+				   NULL,
+				   false,
+				   &err_type);
 	if (config_error_is_harmless(&err_type) || err_type.exists) {
-		if (rc > 0) {
+		if (rc == 0) {
 			char *message = alloca(sizeof("%d exports added") + 10);
 
 			snprintf(message,
 				 sizeof("%d exports added") + 10,
-				 "%d exports added", rc);
+				 "%d exports added", 1);
 			dbus_message_iter_init_append(reply, &iter);
 			dbus_message_iter_append_basic(&iter,
 						       DBUS_TYPE_STRING,
@@ -811,7 +843,7 @@ static bool gsh_export_addexport(DBusMessageIter *args,
 out:
 	if (err_detail != NULL)
 		gsh_free(err_detail);
-	config_Free(config_struct);
+	if (config_struct) config_Free(config_struct);
 	return retval;
 }
 
@@ -819,6 +851,7 @@ static struct gsh_dbus_method export_add_export = {
 	.name = "AddExport",
 	.method = gsh_export_addexport,
 	.args =	{PATH_ARG,
+		 ID_ARG,
 		 MESSAGE_REPLY,
 		 END_ARG_LIST}
 };
