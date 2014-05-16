@@ -78,6 +78,9 @@ static struct export_by_id export_by_id;
 
 static struct glist_head exportlist;
 
+/* Make sure only one thread can Add or Remove export at a time. */
+static pthread_mutex_t dynamic_export_serializer = PTHREAD_MUTEX_INITIALIZER;
+
 /**
  * @brief Compute cache slot for an entry
  *
@@ -754,6 +757,8 @@ static bool gsh_export_addexport(DBusMessageIter *args,
 	DBusMessageIter iter;
 	char *err_detail = NULL;
 
+	pthread_mutex_lock(&dynamic_export_serializer);
+
 	/* Get path */
 	if (dbus_message_iter_get_arg_type(args) == DBUS_TYPE_STRING)
 		dbus_message_iter_get_basic(args, &file_path);
@@ -859,6 +864,7 @@ static bool gsh_export_addexport(DBusMessageIter *args,
 			       err_detail != NULL ? err_detail : "unknown");
 	}
 out:
+	pthread_mutex_unlock(&dynamic_export_serializer);
 	if (err_detail != NULL)
 		gsh_free(err_detail);
 	config_Free(config_struct);
@@ -890,6 +896,7 @@ static bool gsh_export_removeexport(DBusMessageIter *args,
 	char *errormsg;
 	bool rc = true;
 
+	pthread_mutex_lock(&dynamic_export_serializer);
 	export = lookup_export(args, &errormsg);
 	if (export == NULL) {
 		LogDebug(COMPONENT_EXPORT, "lookup_export failed with %s",
@@ -917,6 +924,7 @@ static bool gsh_export_removeexport(DBusMessageIter *args,
 	}
 
 out:
+	pthread_mutex_unlock(&dynamic_export_serializer);
 	return rc;
 }
 
