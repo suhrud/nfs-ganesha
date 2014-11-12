@@ -52,12 +52,15 @@
 #include <strings.h>
 #include <pwd.h>
 #include <grp.h>
+#include <time.h>
 
 #ifdef _APPLE
 #define strnlen( s, l ) strlen( s )
 #else
 size_t strnlen(const char *s, size_t maxlen);
 #endif
+
+#define IDMAP_CACHE_TIMEOUT 30
 
 /* Hashtable used to cache the hostname, accessed by their IP addess */
 hash_table_t *ht_pwnam;
@@ -73,9 +76,18 @@ hash_table_t *ht_uidgid;
  * (.pdata) of the hashbuffer_t.  This union accomplishes that mapping.
  */
 
-union idmap_val {
-	caddr_t id_as_pointer;
-	uint32_t real_id;
+struct idmap_val {
+	time_t timestamp;
+        union {
+	  uint32_t real_id;
+          char *name;
+        };
+};
+
+union idmap_convert{
+        uint32_t id;
+        caddr_t id_as_pointer;
+
 };
 
 /**
@@ -254,30 +266,52 @@ int idmap_add(hash_table_t * ht, char *key, uint32_t val)
   hash_buffer_t buffkey;
   hash_buffer_t buffdata;
   int rc;
-  union idmap_val local_val = {0};
+  int status = ID_MAPPER_SUCCESS;
+  struct idmap_val *local_val = NULL;
 
   if(ht == NULL || key == NULL)
-    return ID_MAPPER_INVALID_ARGUMENT;
-
+  {
+    status = ID_MAPPER_INVALID_ARGUMENT;
+    goto err;
+  }
+  
   if((buffkey.pdata = gsh_strdup(key)) == NULL)
-    return ID_MAPPER_INSERT_MALLOC_ERROR;
+  {
+    status = ID_MAPPER_INSERT_MALLOC_ERROR;
+    goto err;
+  }
 
   /* Build the key */
   buffkey.len = strlen(key);
 
   /* Build the value */
-  local_val.real_id = val;
-  buffdata.pdata = local_val.id_as_pointer;
-  buffdata.len = sizeof(union idmap_val);
+  local_val = (struct idmap_val *)gsh_malloc(sizeof(struct idmap_val));
+  if(local_val == NULL){
+    LogEvent(COMPONENT_IDMAPPER, "idmap_add: malloc failed");
+    status = ID_MAPPER_INSERT_MALLOC_ERROR;
+    goto err;
+  }
+  local_val->real_id = val;
+  local_val->timestamp = time(NULL);
+
+  buffdata.pdata = local_val;
+  buffdata.len = sizeof(struct idmap_val);
   LogFullDebug(COMPONENT_IDMAPPER, "Adding the following principal->uid mapping: %s->%lu",
-	       (char *)buffkey.pdata, (unsigned long int)buffdata.pdata);
+	       (char *)buffkey.pdata, (unsigned long int)local_val->real_id);
   rc = HashTable_Test_And_Set(ht, &buffkey, &buffdata,
                               HASHTABLE_SET_HOW_SET_NO_OVERWRITE);
 
-  if(rc != HASHTABLE_SUCCESS && rc != HASHTABLE_ERROR_KEY_ALREADY_EXISTS)
-    return ID_MAPPER_INSERT_MALLOC_ERROR;
+  if(rc != HASHTABLE_SUCCESS && rc != HASHTABLE_ERROR_KEY_ALREADY_EXISTS) {
+  
+       status = ID_MAPPER_INSERT_MALLOC_ERROR;
+       goto err;
+  }
 
   return ID_MAPPER_SUCCESS;
+
+err:
+  if(local_val) gsh_free(local_val);
+  return status;
 }                               /* idmap_add */
 
 int namemap_add(hash_table_t * ht, uint32_t key, char *val)
@@ -285,31 +319,52 @@ int namemap_add(hash_table_t * ht, uint32_t key, char *val)
   hash_buffer_t buffkey;
   hash_buffer_t buffdata;
   int rc = 0;
-  union idmap_val local_key = {0};
+  int status = ID_MAPPER_SUCCESS;
+  struct idmap_val *local_val = NULL;
+  union idmap_convert id_key = {0};
 
-  if(ht == NULL || val == NULL)
-    return ID_MAPPER_INVALID_ARGUMENT;
+  if(ht == NULL || val == NULL) {
+    status = ID_MAPPER_INVALID_ARGUMENT;
+    goto err;
+  }
 
-  if((buffdata.pdata = gsh_strdup(val)) == NULL)
-    return ID_MAPPER_INSERT_MALLOC_ERROR;
+  local_val = (struct idmap_val *)gsh_malloc(sizeof(struct idmap_val));
+  if(local_val == NULL){
+    LogEvent(COMPONENT_IDMAPPER, "idmap_add: malloc failed");
+    status = ID_MAPPER_INSERT_MALLOC_ERROR;
+    goto err;
+  }
+  if((local_val->name = gsh_strdup(val)) == NULL)
+  {
+    status = ID_MAPPER_INSERT_MALLOC_ERROR;
+    goto err;
+  }
+  local_val->timestamp = time(NULL);
 
   /* Build the data */
-  buffdata.len = strlen(val);
+  buffdata.pdata = local_val;
+  buffdata.len = strlen(val) + sizeof(struct idmap_val);
 
   /* Build the key */
-  local_key.real_id = key;
-  buffkey.pdata = local_key.id_as_pointer;
-  buffkey.len = sizeof(union idmap_val);
+  id_key.id = key;
+  buffkey.pdata = id_key.id_as_pointer;
+  buffkey.len = sizeof(id_key);
 
   LogFullDebug(COMPONENT_IDMAPPER, "Adding the following uid->principal mapping: %lu->%s",
-	       (unsigned long int)buffkey.pdata, (char *)buffdata.pdata);
+	       (unsigned long int)buffkey.pdata, (char *)local_val->name);
   rc = HashTable_Test_And_Set(ht, &buffkey, &buffdata,
                               HASHTABLE_SET_HOW_SET_NO_OVERWRITE);
 
-  if(rc != HASHTABLE_SUCCESS && rc != HASHTABLE_ERROR_KEY_ALREADY_EXISTS)
-    return ID_MAPPER_INSERT_MALLOC_ERROR;
+  if(rc != HASHTABLE_SUCCESS && rc != HASHTABLE_ERROR_KEY_ALREADY_EXISTS){
+    status = ID_MAPPER_INSERT_MALLOC_ERROR;
+    goto err;
+  }
 
   return ID_MAPPER_SUCCESS;
+
+err:
+  if(local_val)gsh_free(local_val);
+  return status;
 }                               /* idmap_add */
 
 int uidgidmap_add(uid_t key, gid_t value)
@@ -317,17 +372,17 @@ int uidgidmap_add(uid_t key, gid_t value)
   hash_buffer_t buffkey;
   hash_buffer_t buffdata;
   int rc = 0;
-  union idmap_val local_key = {0};
-  union idmap_val local_val = {0};
+  union idmap_convert id_key = {0};
+  union idmap_convert id_value = {0};
 
   /* Build keys and data, no storage is used there, caddr_t pointers are just charged */
-  local_key.real_id = key;
-  buffkey.pdata = local_key.id_as_pointer;
-  buffkey.len = sizeof(union idmap_val);
+  id_key.id = key;
+  buffkey.pdata = id_key.id_as_pointer;
+  buffkey.len = sizeof(id_key);
 
-  local_val.real_id = value;
-  buffdata.pdata = local_val.id_as_pointer;
-  buffdata.len = sizeof(union idmap_val);
+  id_value.id = value;
+  buffdata.pdata =  id_value.id_as_pointer;
+  buffdata.len = sizeof(id_value);
 
   rc = HashTable_Test_And_Set(ht_uidgid, &buffkey, &buffdata,
                               HASHTABLE_SET_HOW_SET_OVERWRITE);
@@ -495,11 +550,18 @@ int idmap_get(hash_table_t * ht, char *key, uint32_t *pval)
 
   if(HashTable_Get(ht, &buffkey, &buffval) == HASHTABLE_SUCCESS)
     {
-      union idmap_val id;
-
-      id.id_as_pointer = buffval.pdata;
-      *pval = id.real_id;
-      status = ID_MAPPER_SUCCESS;
+      struct idmap_val *id = (struct idmap_val *) buffval.pdata;
+     
+      if(id->timestamp > time(NULL) - IDMAP_CACHE_TIMEOUT)
+        {
+              *pval = id->real_id;
+              status = ID_MAPPER_SUCCESS;
+        }
+      else
+        {
+                // Cache expired.
+                status = ID_MAPPER_CACHE_EXPIRE;
+        }
     }
   else
     {
@@ -514,20 +576,28 @@ int namemap_get(hash_table_t * ht, uint32_t key, char *pval, size_t size)
   hash_buffer_t buffkey;
   hash_buffer_t buffval;
   int status;
-  union idmap_val local_key = {0};
+  union idmap_convert id_key = {0};
 
   if(ht == NULL || pval == NULL)
     return ID_MAPPER_INVALID_ARGUMENT;
 
-  local_key.real_id = key;
-  buffkey.pdata = local_key.id_as_pointer;
-  buffkey.len = sizeof(union idmap_val);
+  id_key.id = key;
+  buffkey.pdata = id_key.id_as_pointer;
+  buffkey.len = sizeof(id_key);
 
   if(HashTable_Get(ht, &buffkey, &buffval) == HASHTABLE_SUCCESS)
     {
-      strmaxcpy(pval, (char *)buffval.pdata, size);
-
-      status = ID_MAPPER_SUCCESS;
+      struct idmap_val *local_val = buffval.pdata;
+      if(local_val->timestamp > time(NULL) - IDMAP_CACHE_TIMEOUT)
+        {
+              strmaxcpy(pval, local_val->name, size);
+              status = ID_MAPPER_SUCCESS;
+        }
+      else
+        {
+                // Cache expired.
+                status = ID_MAPPER_CACHE_EXPIRE;
+        }
     }
   else
     {
@@ -542,21 +612,20 @@ int uidgidmap_get(uid_t key, gid_t *pval)
   hash_buffer_t buffkey;
   hash_buffer_t buffval;
   int status;
-  union idmap_val local_key = {0};
+  union idmap_convert id_key = {0};
+  union idmap_convert id_value = {0};
 
   if(pval == NULL)
     return ID_MAPPER_INVALID_ARGUMENT;
 
-  local_key.real_id = key;
-  buffkey.pdata = local_key.id_as_pointer;
-  buffkey.len = sizeof(union idmap_val);
+  id_key.id = key;
+  buffkey.pdata = id_key.id_as_pointer;
+  buffkey.len = sizeof(id_key);
 
   if(HashTable_Get(ht_uidgid, &buffkey, &buffval) == HASHTABLE_SUCCESS)
     {
-      union idmap_val id;
-
-      id.id_as_pointer = buffval.pdata;
-      *pval = id.real_id;
+      id_value.id_as_pointer = buffval.pdata;
+      *pval = id_key.id;
       status = ID_MAPPER_SUCCESS;
     }
   else
@@ -577,22 +646,51 @@ int uidgidmap_get(uid_t key, gid_t *pval)
 
 int uidmap_get(char *key, uid_t *pval)
 {
-  return idmap_get(ht_pwnam, key, pval);
+  int rc = idmap_get(ht_pwnam, key, pval);
+
+  if(rc == ID_MAPPER_CACHE_EXPIRE)
+  {
+    uidmap_remove(key);
+    rc = ID_MAPPER_NOT_FOUND;
+  }
+  return rc;
 }
 
 int unamemap_get(uid_t key, char *val, size_t size)
 {
-  return namemap_get(ht_pwuid, key, val, size);
+  int rc = namemap_get(ht_pwuid, key, val, size); 
+  
+  if(rc == ID_MAPPER_CACHE_EXPIRE)
+  {
+    unamemap_remove(key);
+    uidgidmap_remove(key);
+    rc = ID_MAPPER_NOT_FOUND;
+  }
+  return rc;
 }
 
 int gidmap_get(char *key, gid_t *pval)
 {
-  return idmap_get(ht_grnam, key, pval);
+  int rc = idmap_get(ht_grnam, key, pval);
+
+  if(rc == ID_MAPPER_CACHE_EXPIRE)
+  {
+    gidmap_remove(key);
+    rc = ID_MAPPER_NOT_FOUND;
+  }
+  return rc;
 }
 
 int gnamemap_get(gid_t key, char *val, size_t size)
 {
-  return namemap_get(ht_grgid, key, val, size);
+  int rc = namemap_get(ht_grgid, key, val, size);
+
+  if(rc == ID_MAPPER_CACHE_EXPIRE)
+  {
+    gnamemap_remove(key);
+    rc = ID_MAPPER_NOT_FOUND;
+  }
+  return rc;
 }
 
 /**
@@ -635,14 +733,14 @@ int namemap_remove(hash_table_t * ht, uint32_t key)
 {
   hash_buffer_t buffkey, old_data;
   int status;
-  union idmap_val local_key = {0};
+  union idmap_convert id_key = {0};
 
   if(ht == NULL)
     return ID_MAPPER_INVALID_ARGUMENT;
 
-  local_key.real_id = key;
-  buffkey.pdata = local_key.id_as_pointer;
-  buffkey.len = sizeof(union idmap_val);
+  id_key.id = key;
+  buffkey.pdata = id_key.id_as_pointer;
+  buffkey.len = sizeof(id_key);
 
   if(HashTable_Del(ht, &buffkey, NULL, &old_data) == HASHTABLE_SUCCESS)
     {
@@ -661,11 +759,11 @@ int uidgidmap_remove(uid_t key)
 {
   hash_buffer_t buffkey, old_data;
   int status;
-  union idmap_val local_key = {0};
+  union idmap_convert id_key = {0};
 
-  local_key.real_id = key;
-  buffkey.pdata = local_key.id_as_pointer;
-  buffkey.len = sizeof(union idmap_val);
+  id_key.id = key;
+  buffkey.pdata = id_key.id_as_pointer;
+  buffkey.len = sizeof(id_key);
 
   if(HashTable_Del(ht_uidgid, &buffkey, NULL, &old_data) == HASHTABLE_SUCCESS)
     {

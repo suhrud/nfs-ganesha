@@ -149,6 +149,7 @@
 #define ID_MAPPER_NOT_FOUND           2
 #define ID_MAPPER_INVALID_ARGUMENT    3
 #define ID_MAPPER_FAIL                4
+#define ID_MAPPER_CACHE_EXPIRE        5
 
 /* Hard and soft limit for nfsv4 quotas */
 #define NFS_V4_MAX_QUOTA_SOFT 4294967296LL      /*  4 GB */
